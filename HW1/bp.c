@@ -3,6 +3,9 @@
 
 #include "bp_api.h"
 
+
+// this is a git test
+
 int BP_init(unsigned btbSize, unsigned historySize, unsigned tagSize, unsigned fsmState,
 			bool isGlobalHist, bool isGlobalTable, int Shared){
 	return -1;
