@@ -2,7 +2,10 @@
 /* This file should hold your implementation of the predictor simulator */
 
 #include "bp_api.h"
-
+#define TARGETSIZE 30
+#define VALIDBIT 1
+#define STATEMACHINESIZE 2
+#define NEXTPC 4
 static unsigned flush_num = 0;	// Machine flushes
 static unsigned br_num = 0;		// Number of branch instructions
 static unsigned btb_size;		// Theoretical allocated BTB and branch predictor size
@@ -53,16 +56,19 @@ unsigned calculate_size(unsigned size, unsigned tagSize, unsigned historySize,
 	// the BTB entry always contains the tag, target and valid bit
 	// the tag is <tagSize> bits, the target is 30 bits and the valid bit is 1 bit
 	if (isGlobalHist && isGlobalTable) { // global history and global fsm tables
-		btb_size = size * (1 + tagSize + 30) + historySize + 2 * fsmSize;
+		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE) 
+				   + historySize + STATEMACHINESIZE * fsmSize;
 	}
 	else if (isGlobalHist && !isGlobalTable) { // global history and local fsm tables
-		btb_size = size * (1 + tagSize + 30 + historySize) + 2 * fsmSize;
+		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + historySize) 
+				   + STATEMACHINESIZE * fsmSize;
 	}
 	else if (!isGlobalHist && isGlobalTable) { // local history and global fsm tables
-		btb_size = size * (1 + tagSize + 30 + 2 * fsmSize) + historySize;
+		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + STATEMACHINESIZE * fsmSize) 
+				   + historySize;
 	}
 	else if (!isGlobalHist && !isGlobalTable) { // local history and local fsm tables
-		btb_size = size * (1 + tagSize + 30 + historySize + 2 * fsmSize);
+		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + historySize + STATEMACHINESIZE * fsmSize);
 	}	
 	return btb_size;
 }
@@ -455,7 +461,7 @@ bool BP_predict(uint32_t pc, uint32_t *dst) {
 		}
 	}
 	// If the prediction is not taken or isnt in the BTB, return the next PC
-	*dst = pc + 4;
+	*dst = pc + NEXTPC;
 	return false;
 }
 
@@ -467,7 +473,7 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst) {
 		}
 	}
 	else { // if not taken, flush if prediction was taken
-		if (pred_dst != (pc + 4)) {
+		if (pred_dst != (pc + NEXTPC)) {
 			flush_num++;
 		}
 	}
