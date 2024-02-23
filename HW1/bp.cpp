@@ -486,6 +486,7 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst) {
 	// Update the BTB entry
 	if (entry->compare_tag(tag)) {
 		entry->update_fsm_table(taken);
+		entry->update_target(targetPc); // in case there are 2 branches with the same tag
 	}
 	// If the tag does not match, replace the entry
 	else {
