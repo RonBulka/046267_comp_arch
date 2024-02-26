@@ -60,12 +60,12 @@ unsigned calculate_size(unsigned size, unsigned tagSize, unsigned historySize,
 				   + historySize + STATEMACHINESIZE * fsmSize;
 	}
 	else if (isGlobalHist && !isGlobalTable) { // global history and local fsm tables
-		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + historySize) 
-				   + STATEMACHINESIZE * fsmSize;
-	}
-	else if (!isGlobalHist && isGlobalTable) { // local history and global fsm tables
 		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + STATEMACHINESIZE * fsmSize) 
 				   + historySize;
+	}
+	else if (!isGlobalHist && isGlobalTable) { // local history and global fsm tables
+		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + historySize) 
+				   + STATEMACHINESIZE * fsmSize;
 	}
 	else if (!isGlobalHist && !isGlobalTable) { // local history and local fsm tables
 		btb_size = size * (VALIDBIT + tagSize + TARGETSIZE + historySize + STATEMACHINESIZE * fsmSize);
@@ -85,37 +85,37 @@ class FSM_table {
 	public:
 		// Constructor
 		FSM_table(uint16_t size, int fsmState) : size(size), fsmState(fsmState) {
-			table = new uint8_t[size];
-			for (int i = 0; i < size; i++) {
-				table[i] = fsmState;
+			this->table = new uint8_t[size];
+			for (int i = 0; i < this->size; i++) {
+				this->table[i] = this->fsmState;
 			}
 		}
 		// Destructor
 		~FSM_table() {
-			delete[] table;
+			delete[] this->table;
 		}
 		// Reset the FSM table
 		void reset_table() {
-			for (int i = 0; i < size; i++) {
-				table[i] = fsmState;
+			for (int i = 0; i < this->size; i++) {
+				this->table[i] = this->fsmState;
 			}
 		}
 		// Update the FSM table
 		void update_table(bool taken, int index) {
 			if(taken) {
-				if(table[index] < 3) {
-					table[index]++;
+				if(this->table[index] < 3) {
+					this->table[index]++;
 				}
 			}
 			else {
-				if(table[index] > 0) {
-					table[index]--;
+				if(this->table[index] > 0) {
+					this->table[index]--;
 				}
 			}
 		}
 		// Get the decision from the FSM table
 		bool give_decision(int index) {
-			return (table[index] >> 1) ? true : false;
+			return (this->table[index] >> 1) ? true : false;
 		}
 };
 
@@ -125,49 +125,63 @@ class FSM_table {
  */
 class BTB_entry {
 	private:
+		bool valid;
+		uint32_t full_tag;
 		uint32_t tag;
 		uint32_t target;
 		unsigned historySize;
 	public:
 		// Constructor
-		BTB_entry(unsigned historySize) : tag(0), target(0), 
+		BTB_entry(unsigned historySize) : valid(false), full_tag(0), tag(0), target(0), 
 									      historySize(historySize) {
 		}
 		// Destructor
 		virtual ~BTB_entry() {
 		}
-		// Update the tag and target
+		// Check if the entry is valid
+		bool is_valid() {
+			return this->valid;
+		}
+		// Set the entry as valid
+		void set_valid() {
+			this->valid = true;
+		}
+		// Update the full_tag, tag and target
+		void update_full_tag(uint32_t full_tag) {
+			this->full_tag = full_tag;
+		}
 		void update_tag(uint32_t tag) {
 			this->tag = tag;
 		}
 		void update_target(uint32_t target) {
 			this->target = target;
 		}
-		// Get the tag, target and history size
+		// Get the full_tag, tag, target and history size
+		uint32_t get_full_tag() {
+			return this->full_tag;
+		}
 		uint32_t get_target() {
-			return target;
+			return this->target;
 		}
 		uint32_t get_tag() {
-			return tag;
+			return this->tag;
 		}
 		unsigned get_historySize() {
-			return historySize;
+			return this->historySize;
 		}
 		// Compare the tag
-		bool compare_tag(uint32_t tag) {
-			return this->tag == tag;
+		bool compare_tag(uint32_t new_tag) {
+			if (!this->valid) {
+				return false;
+			}
+			return (this->tag == new_tag) ? true : false;
 		}
 		// Pure virtual functions
 		virtual void update_fsm_table(bool taken) = 0;
-		virtual uint8_t& get_history() = 0;
+		virtual uint8_t get_history() = 0;
 		virtual bool predict_decision() = 0;
-		virtual void replace_entry(uint32_t tag, uint32_t target) = 0;
-		// Update the history
-		void update_history(uint8_t* history, bool taken, unsigned historySize) {
-			*history = *history << 1; // shift left once for the new bit
-			*history |= (uint8_t)taken; // add the new bit
-			*history = *history & ((1 << historySize) - 1); // Mask the historySize least significant bits
-		}
+		virtual void replace_entry(uint32_t full_tag, uint32_t tag, uint32_t target) = 0;
+		virtual void update_history(bool taken) = 0;
 };
 
 // local history and local fsm tables
@@ -183,26 +197,39 @@ class LHLT_BTB_entry : public BTB_entry {
 		}
 		// Destructor
 		~LHLT_BTB_entry() {
-			delete fsm_table;
+			delete this->fsm_table;
 		}
 		// Update the FSM table
 		void update_fsm_table(bool taken) {
-			fsm_table->update_table(taken, history);
+			this->fsm_table->update_table(taken, this->history);
 		}
 		// Get the history
-		uint8_t& get_history() {
-			return history;
+		uint8_t get_history() {
+			return this->history;
 		}
 		// Get the decision from the FSM table
 		bool predict_decision() {
-			return fsm_table->give_decision(history);
+			return this->fsm_table->give_decision(this->history);
 		}
 		// Replace the entry
-		void replace_entry(uint32_t tag, uint32_t target) {
-			update_tag(tag);
-			update_target(target);
-			history = 0;
-			fsm_table->reset_table();
+		void replace_entry(uint32_t full_tag, uint32_t tag, uint32_t target) {
+			this->set_valid();
+			this->update_full_tag(full_tag);
+			this->update_tag(tag);
+			this->update_target(target);
+			this->history = 0;
+			this->fsm_table->reset_table();
+		}
+		// Update the history
+		void update_history(bool taken) {
+			this->history <<= 1; // shift left once for the new bit
+			if (taken) {
+				this->history |= 1; // add the new bit
+			}
+			else {
+				this->history &= 0xFE; // clear the lsb
+			}
+			this->history = this->history & ((1 << this->get_historySize()) - 1); // Mask the historySize least significant bits
 		}
 };
 
@@ -219,36 +246,53 @@ class LHGT_BTB_entry : public BTB_entry {
 		}
 		// Destructor
 		~LHGT_BTB_entry() {
-			delete fsm_table;
+			delete this->fsm_table;
 		}
 		// Calculate the index for the FSM table
 		uint8_t calc_fsm_index() {
-			if(Shared == 1) { // xor historySize lsb
-				return history ^ (get_tag() & ((1 << get_historySize()) - 1));
+			if(this->Shared == 1) { // xor historySize lsb
+				uint32_t tag_part = (this->get_full_tag() & ((1 << this->get_historySize()) - 1));
+				return this->history ^ (uint8_t)tag_part;
 			}
-			else if(Shared == 2) { // xor 16 from mid
-				return history ^ ((get_tag() >> 16) & ((1 << get_historySize()) - 1));
+			else if(this->Shared == 2) { // xor 16 from mid
+				uint32_t tag_part = ((this->get_full_tag() >> 14) & ((1 << this->get_historySize()) - 1));
+				return this->history ^ (uint8_t)tag_part;
 			}
-			return history; // not shared
+			return this->history; // not shared
 			
 		}
 		// Update the FSM table
 		void update_fsm_table(bool taken) {
-			fsm_table->update_table(taken, calc_fsm_index());
+			int index = this->calc_fsm_index();
+			this->fsm_table->update_table(taken, index);
 		}
 		// Get the history
-		uint8_t& get_history() {
-			return history;
+		uint8_t get_history() {
+			return this->history;
 		}
 		// Get the decision from the FSM table
 		bool predict_decision() {
-			return fsm_table->give_decision(calc_fsm_index());
+			int index = this->calc_fsm_index();
+			return this->fsm_table->give_decision(index);
 		}
 		// Replace the entry
-		void replace_entry(uint32_t tag, uint32_t target) {
+		void replace_entry(uint32_t full_tag, uint32_t tag, uint32_t target) {
+			set_valid();
+			update_full_tag(full_tag);
 			update_tag(tag);
 			update_target(target);
-			history = 0;
+			this->history = 0;
+		}
+		// Update the history
+		void update_history(bool taken) {
+			this->history <<= 1; // shift left once for the new bit
+			if (taken) {
+				this->history |= 1; // add the new bit
+			}
+			else {
+				this->history &= 0xFE; // clear the lsb
+			}
+			this->history = this->history & ((1 << this->get_historySize()) - 1); // Mask the historySize least significant bits
 		}
 };
 
@@ -266,23 +310,36 @@ class GHLT_BTB_entry : public BTB_entry {
 		}
 		// Destructor
 		~GHLT_BTB_entry() {
-			delete fsm_table;
+			delete this->fsm_table;
 		}
 		// Update the FSM table
 		void update_fsm_table(bool taken) {
-			fsm_table->update_table(taken, *history);
+			this->fsm_table->update_table(taken, *this->history);
 		}
 		// Get the history
-		uint8_t& get_history() {
-			return *history;
+		uint8_t get_history() {
+			return *this->history;
 		}
 		bool predict_decision() {
-			return fsm_table->give_decision(*history);
+			return this->fsm_table->give_decision(*this->history);
 		}
-		void replace_entry(uint32_t tag, uint32_t target) {
+		void replace_entry(uint32_t full_tag, uint32_t tag, uint32_t target) {
+			set_valid();
+			update_full_tag(full_tag);
 			update_tag(tag);
 			update_target(target);
-			fsm_table->reset_table();
+			this->fsm_table->reset_table();
+		}
+		// Update the history
+		void update_history(bool taken) {
+			*this->history <<= 1; // shift left once for the new bit
+			if (taken) {
+				*this->history |= 1; // add the new bit
+			}
+			else {
+				*this->history &= 0xFE; // clear the lsb
+			}
+			*this->history = *this->history & ((1 << this->get_historySize()) - 1); // Mask the historySize least significant bits
 		}
 };
 
@@ -300,37 +357,53 @@ class GHGT_BTB_entry : public BTB_entry {
 		}
 		// Destructor
 		~GHGT_BTB_entry() {
-			delete fsm_table;
+			delete this->fsm_table;
 		}
 		// Calculate the index for the FSM table
 		uint8_t calc_fsm_index() {
-			if(Shared == 1) { // xor historySize lsb
-				return *history ^ (get_tag() & ((1 << get_historySize()) - 1));
+			if(this->Shared == 1) { // xor historySize lsb
+				uint32_t tag_part = (this->get_full_tag() & ((1 << this->get_historySize()) - 1));
+				return *this->history ^ (uint8_t)tag_part;
 			}
-			else if(Shared == 2) { // xor 16 from mid
-				return *history ^ ((get_tag() >> 16) & ((1 << get_historySize()) - 1));
+			else if(this->Shared == 2) { // xor 16 from mid
+				uint32_t tag_part = ((this->get_full_tag() >> 14) & ((1 << this->get_historySize()) - 1));
+				return *this->history ^ (uint8_t)tag_part;
 			}
-			return *history; // not shared
+			return *this->history; // not shared
 			
 		}
 		// Update the FSM table
 		void update_fsm_table(bool taken) {
-			fsm_table->update_table(taken, calc_fsm_index());
+			int index = this->calc_fsm_index();
+			this->fsm_table->update_table(taken, index);
 		}
 		// Get the history
-		uint8_t& get_history() {
-			return *history;
+		uint8_t get_history() {
+			return *this->history;
 		}
 		// Get the decision from the FSM table
 		bool predict_decision() {
-			return fsm_table->give_decision(calc_fsm_index());
+			int index = this->calc_fsm_index();
+			return this->fsm_table->give_decision(index);
 		}
 		// Replace the entry
-		void replace_entry(uint32_t tag, uint32_t target) {
-			update_tag(tag);
-			update_target(target);
+		void replace_entry(uint32_t full_tag, uint32_t tag, uint32_t target) {
+			this->set_valid();
+			this->update_full_tag(full_tag);
+			this->update_tag(tag);
+			this->update_target(target);
 		}
-
+		// Update the history
+		void update_history(bool taken) {
+			*this->history <<= 1; // shift left once for the new bit
+			if (taken) {
+				*this->history |= 1; // add the new bit
+			}
+			else {
+				*this->history &= 0xFE; // clear the lsb
+			}
+			*this->history = *this->history & ((1 << this->get_historySize()) - 1); // Mask the historySize least significant bits
+		}
 };
 
 /**
@@ -358,58 +431,64 @@ class BTB {
 			size(size), tagSize(tagSize), historySize(historySize), 
 			fsmState(fsmState), isGlobalHist(isGlobalHist), 
 			isGlobalTable(isGlobalTable), Shared(Shared), btb(nullptr),
-			history(nullptr), fsm_table(nullptr) 
+			history(nullptr), fsm_table(nullptr), fsmSize(0), btb_index_size(0)
 		{
 			// Calculate the size of the FSM table
-			uint16_t fsmSize = power(2, historySize);
+			this->fsmSize = power(2, this->historySize);
 			// Allocate the BTB table
-			btb = new BTB_entry*[size];
+			this->btb = new BTB_entry*[this->size];
 			// Allocate the global history register and the global FSM table
-			if(isGlobalHist) {
-				history = new uint8_t;
+			if(this->isGlobalHist) {
+				this->history = new uint8_t;
 			}
-			if(isGlobalTable) {
-				fsm_table = new FSM_table(fsmSize, fsmState);
+			if(this->isGlobalTable) {
+				this->fsm_table = new FSM_table(this->fsmSize, this->fsmState);
 			}
 			// Calculate the BTB index size
-			btb_index_size = log2(size);
+			this->btb_index_size = log2(this->size);
 			// Calculate the size of the branch predictor
-			btb_size = calculate_size(size, tagSize, historySize, 
-									  fsmSize, isGlobalHist, isGlobalTable);
+			btb_size = calculate_size(this->size, this->tagSize, this->historySize, 
+									  this->fsmSize, this->isGlobalHist, this->isGlobalTable);
 		}
 		// Destructor
 		~BTB() {
-			delete[] btb;
-			if (isGlobalHist) {
-				delete history;
+			delete[] this->btb;
+			if (this->isGlobalHist) {
+				delete this->history;
 			}
-			if (isGlobalTable) {
-				delete fsm_table;
+			if (this->isGlobalTable) {
+				delete this->fsm_table;
 			}
 		}
 		// Initialize the BTB entries
 		int init_BTB_entries() {
 			// Initialize BTB entries
-			if(isGlobalHist && isGlobalTable) {
-				for (unsigned i = 0; i < size; i++) {
-					btb[i] = new GHGT_BTB_entry(history, historySize, fsm_table,
-												Shared);
+			// global history and global fsm tables
+			if(this->isGlobalHist && this->isGlobalTable) {
+				for (unsigned int i = 0; i < this->size; i++) {
+					this->btb[i] = new GHGT_BTB_entry(this->history, this->historySize, 
+													  this->fsm_table, this->Shared);
 				}
 			}
-			else if(isGlobalHist && !isGlobalTable) {
-				for (unsigned i = 0; i < size; i++) {
-					btb[i] = new GHLT_BTB_entry(history, historySize, fsmState,
-											    fsmSize);
+			// global history and local fsm tables
+			else if(this->isGlobalHist && !this->isGlobalTable) {
+				for (unsigned int i = 0; i < this->size; i++) {
+					this->btb[i] = new GHLT_BTB_entry(this->history, this->historySize, 
+													  this->fsmState, this->fsmSize);
 				}
 			}
-			else if(!isGlobalHist && isGlobalTable) {
-				for (unsigned i = 0; i < size; i++) {
-					btb[i] = new LHGT_BTB_entry(historySize, fsm_table, Shared);
+			// local history and global fsm tables
+			else if(!this->isGlobalHist && this->isGlobalTable) {
+				for (unsigned int i = 0; i < this->size; i++) {
+					this->btb[i] = new LHGT_BTB_entry(this->historySize, this->fsm_table,
+											 		  this->Shared);
 				}
 			}
-			else if(!isGlobalHist && !isGlobalTable) {
-				for (unsigned i = 0; i < size; i++) {
-					btb[i] = new LHLT_BTB_entry(historySize, fsmState, fsmSize);
+			// local history and local fsm tables
+			else if(!this->isGlobalHist && !this->isGlobalTable) {
+				for (unsigned int i = 0; i < this->size; i++) {
+					this->btb[i] = new LHLT_BTB_entry(this->historySize, this->fsmState,
+									 				  this->fsmSize);
 				}
 			}
 			else {
@@ -419,15 +498,34 @@ class BTB {
 		}
 		// Getters
 		unsigned get_size() {
-			return size;
+			return this->size;
 		}
 		unsigned get_btb_index_size() {
-			return btb_index_size;
+			return this->btb_index_size;
 		}
 		BTB_entry* get_entry(uint32_t full_tag) {
-			uint8_t tag_index = full_tag & (size - 1);
-			return btb[tag_index];
-		} 
+			if (this->size == 1) {
+				return this->btb[0];
+			}
+			uint8_t tag_index = full_tag & (this->size - 1);
+			return this->btb[tag_index];
+		}
+
+		uint32_t calculate_tag(uint32_t full_tag) {
+			uint32_t new_tag;
+			if (this->btb_index_size == 0) {
+				new_tag = full_tag;
+			}
+			else {
+				new_tag = full_tag >> this->btb_index_size;
+			}
+			if (this->tagSize == 0)
+				return 0;
+			else if (this->tagSize == 30)
+				return new_tag;
+			else
+				return new_tag & ((1 << this->tagSize) - 1);
+		}
 };
 
 static BTB* btb;
@@ -451,9 +549,10 @@ bool BP_predict(uint32_t pc, uint32_t *dst) {
 	// Get the BTB entry
 	BTB_entry* entry = btb->get_entry(full_tag);
 	// Calculate the tag from the full tag (throw away the index bits)
-	uint32_t tag = full_tag >> (btb->get_btb_index_size());
+	uint32_t tag = btb->calculate_tag(full_tag);
 	// Check if the tag matches the entry tag
 	if (entry->compare_tag(tag)) {
+		entry->update_full_tag(full_tag); // in case there are 2 branches with the same tag
 		// If the prediction is taken, return the target
 		if (entry->predict_decision()) {
 			*dst = entry->get_target();
@@ -482,18 +581,20 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst) {
 	// Get the BTB entry
 	BTB_entry* entry = btb->get_entry(full_tag);
 	// Calculate the tag from the full tag (throw away the index bits)
-	uint32_t tag = full_tag >> (btb->get_btb_index_size());
+	uint32_t tag = btb->calculate_tag(full_tag);
 	// Update the BTB entry
 	if (entry->compare_tag(tag)) {
 		entry->update_fsm_table(taken);
+		// entry->update_full_tag(full_tag); // in case there are 2 branches with the same tag
 		entry->update_target(targetPc); // in case there are 2 branches with the same tag
 	}
 	// If the tag does not match, replace the entry
 	else {
-		entry->replace_entry(tag, targetPc);
+		entry->replace_entry(full_tag, tag, targetPc);
+		entry->update_fsm_table(taken);
 	}
 	// Update the history
-	entry->update_history(&entry->get_history(), taken, entry->get_historySize());
+	entry->update_history(taken);
 	return;
 }
 
