@@ -1,4 +1,4 @@
-#pragma ONCE
+// #pragma ONCE
 #ifndef CACHE_SIM_HPP
 #define CACHE_SIM_HPP
 
@@ -6,6 +6,10 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+
+#define READ "r"
+#define WRITE "w"
+#define FULL_TAG_SIZE 32
 
 using  namespace std;
 
@@ -45,25 +49,17 @@ public:
     CacheSet(unsigned int numWays);
     ~CacheSet();
     void initSet(unsigned int numWays);
+    unsigned int getWay(unsigned int tag);
     void updateLRU(unsigned int way);
     bool insertLine(unsigned int tag);
+    bool isLineInSet(unsigned int tag);
     CacheLine* findLine(unsigned int tag);
+    CacheLine* removeLine();
     CacheLine* removeLine(unsigned int way);
     bool writeToLine(unsigned int tag);
     bool readFromLine(unsigned int tag);
+    void updateDirty(unsigned int way, bool dirty);
 };
-
-// class CacheWays {
-// private:
-//     unsigned int numOfSets;
-//     bool writeAllocate;
-//     CacheSet* sets;
-// public:
-//     CacheWays(unsigned int numOfSets, unsigned int numOfWays, bool writeAllocate);
-//     ~CacheWays();
-//     void readFromCache(unsigned int index, unsigned int tag);
-//     void writeToCache(unsigned int index, unsigned int tag);
-// };
 
 // Bsize = block size in bytes (given in log2) -> offset bits = Bsize
 // Associativity = number of ways (given in log2)
@@ -74,7 +70,6 @@ public:
 // class Ways (sets), class Set (tag+data)
 // dirty bit and LRU bit (for replacement policy, might be more than a bit), valid bit
 
-// make a class for the specific index and tag bits which stores the assoc lines for a specific set
 class Cache {
 private:
     unsigned int MemCyc; // Memory cycles
@@ -84,8 +79,8 @@ private:
     unsigned int L1Cyc, L2Cyc; // L1 and L2 access time in cycles
     unsigned int WrAlloc; // Write allocate policy (0 = no write allocate, 1 = write allocate)
 
-    unsigned int L1Reads, L1ReadMisses, L1Writes, L1WriteMisses, L1WriteBacks; // L1 cache stats (might not need writebacks)
-    unsigned int L2Reads, L2ReadMisses, L2Writes, L2WriteMisses, L2WriteBacks; // L2 cache stats (might not need writebacks)
+    unsigned int L1Reads, L1ReadMisses, L1Writes, L1WriteMisses; // L1 cache stats
+    unsigned int L2Reads, L2ReadMisses, L2Writes, L2WriteMisses; // L2 cache stats
     unsigned int totalL1Cycles, totalL2Cycles, totalMemCycles; // total cycles for each cache and memory
 
     unsigned int BlockSize; // 2^BSize in bytes
@@ -103,8 +98,22 @@ public:
             unsigned int L1Assoc, unsigned int L2Assoc, unsigned int L1Cyc, unsigned int L2Cyc,
             unsigned int WrAlloc);
     ~Cache();
-    void readFromCache(unsigned int index, unsigned int tag);
-    void writeToCache(unsigned int index, unsigned int tag);
+    unsigned int getL1Reads();
+    unsigned int getL1ReadMisses();
+    unsigned int getL1Writes();
+    unsigned int getL1WriteMisses();
+    unsigned int getL2Reads();
+    unsigned int getL2ReadMisses();
+    unsigned int getL2Writes();
+    unsigned int getL2WriteMisses();
+    unsigned int getTotalL1Cycles();
+    unsigned int getTotalL2Cycles();
+    unsigned int getTotalMemCycles();
+    void readFromCache(unsigned int fullTag);
+    void writeToCache(unsigned int fullTag);
+    void L1ReadMissHandler(unsigned int L1Tag, unsigned int L1index);
+    void L2ReadMissHandler(unsigned int L1Tag, unsigned int L1Index, 
+                           unsigned int L2Tag, unsigned int L2index);
 };
 
 #endif // CACHE_SIM_HPP

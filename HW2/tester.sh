@@ -3,12 +3,51 @@
 make clean
 make
 
-./cacheSim examples/example1_trace --mem-cyc 100 --bsize 3 --wr-alloc 1 --l1-size 4 --l1-assoc 1 --l1-cyc 1 --l2-size 6 --l2-assoc 0 --l2-cyc 5 > example1_ouroutput.out
-./cacheSim examples/example2_trace --mem-cyc 50 --bsize 4 --wr-alloc 1 --l1-size 6 --l1-assoc 1 --l1-cyc 2 --l2-size 8 --l2-assoc 2 --l2-cyc 4 > example2_ouroutput.out
-./cacheSim examples/example3_trace --mem-cyc 10 --bsize 2 --wr-alloc 1 --l1-size 4 --l1-assoc 1 --l1-cyc 1 --l2-size 4 --l2-assoc 2 --l2-cyc 5 > example3_ouroutput.out
+all=0
+fail=0
 
-# diff example1_ouroutput.out examples/example1_output
-# diff example2_ouroutput.out examples/example2_output
-# diff example3_ouroutput.out examples/example3_output
+for filename in command_files/*.command; do
+    #echo $filename
+    test_num=`echo $filename | cut -d'.' -f1 | cut -d'/' -f2`
+     bash ${filename} > ourout_files/${test_num}.YoursOut
+done
 
-# rm -f example*_ouroutput.out
+for filename in output_files/*.out; do
+    (( all++ ))
+    test_num=`echo $filename | cut -d'.' -f1 | cut -d'/' -f2`
+    diff_result=$(diff output_files/${test_num}.out ourout_files/${test_num}.YoursOut)
+    if [ "$diff_result" != "" ]; then
+        echo The test ${test_num} didnt pass
+	    (( fail++ ))
+    fi
+done
+
+for filename in long_tests/*.command; do
+    #echo $filename
+    test_num=`echo $filename | cut -d'.' -f1 | cut -d'/' -f2`
+     bash ${filename} > ourout_long_files/${test_num}.YoursOut
+done
+
+for filename in long_tests/*.out; do
+    (( all++ ))
+    test_num=`echo $filename | cut -d'.' -f1 | cut -d'/' -f2`
+    diff_result=$(diff long_tests/${test_num}.out ourout_long_files/${test_num}.YoursOut)
+    if [ "$diff_result" != "" ]; then
+        echo The test ${test_num} didnt pass
+        (( fail++ ))
+    fi
+done
+
+echo
+echo "faild $fail out of $all "
+echo Ran all tests.
+
+# rm -f ourout_files/*
+
+bash example1_command > example1.YoursOut
+bash example2_command > example2.YoursOut
+bash example3_command > example3.YoursOut
+
+diff -q example1_output example1.YoursOut
+diff -q example2_output example2.YoursOut
+diff -q example3_output example3.YoursOut
