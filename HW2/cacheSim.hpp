@@ -1,4 +1,3 @@
-// #pragma ONCE
 #ifndef CACHE_SIM_HPP
 #define CACHE_SIM_HPP
 
@@ -61,15 +60,6 @@ public:
     void updateDirty(unsigned int way, bool dirty);
 };
 
-// Bsize = block size in bytes (given in log2) -> offset bits = Bsize
-// Associativity = number of ways (given in log2)
-// Lsize = size of the cache in bytes (given in log2)
-// num of blocks = 2^LSize/2^Bsize
-// num of sets = num of blocks / 2^Associativity
-// num of bits for index = log2(num of sets) {Lsize - Bsize - Associativity}
-// class Ways (sets), class Set (tag+data)
-// dirty bit and LRU bit (for replacement policy, might be more than a bit), valid bit
-
 class Cache {
 private:
     unsigned int MemCyc; // Memory cycles
@@ -111,8 +101,8 @@ public:
     unsigned int getTotalMemCycles();
     void readFromCache(unsigned int fullTag);
     void writeToCache(unsigned int fullTag);
-    void L1ReadMissHandler(unsigned int L1Tag, unsigned int L1index);
-    void L2ReadMissHandler(unsigned int L1Tag, unsigned int L1Index, 
+    void L1MissHandler(unsigned int L1Tag, unsigned int L1index);
+    void L2MissHandler(unsigned int L1Tag, unsigned int L1Index, 
                            unsigned int L2Tag, unsigned int L2index);
 };
 

@@ -1,5 +1,6 @@
 #include "cacheSim.hpp"
 
+/**********************************************************************************************/
 // CacheLine definitions
 CacheLine::CacheLine(unsigned int initialLRU) : tag(0), valid(false),
 												dirty(false), LRU(initialLRU) {	
@@ -44,6 +45,7 @@ bool CacheLine::compareTag(unsigned int outsideTag) {
 	return this->tag == outsideTag;
 }
 
+/**********************************************************************************************/
 // CacheSet definitions
 CacheSet::CacheSet() : numWays(0), lineCount(0), lines(nullptr) {
 }
@@ -73,6 +75,7 @@ unsigned int CacheSet::getWay(unsigned int tag) {
 }
 
 void CacheSet::updateLRU(unsigned int way) {
+	// update the LRU of all the lines in the set
 	unsigned int LRU = this->lines[way].getLRU();
 	for (unsigned int i = 0; i < this->numWays; i++) {
 		unsigned int currentLRU = this->lines[i].getLRU();
@@ -84,9 +87,11 @@ void CacheSet::updateLRU(unsigned int way) {
 }
 
 bool CacheSet::insertLine(unsigned int tag) {
+	// check if the set is full
 	if (this->lineCount == this->numWays) {
 		return false;
 	}
+	// find the first invalid line
 	for (unsigned int i = 0; i < this->numWays; i++) {
 		if (!this->lines[i].getValid()) {
 			this->lines[i].setTag(tag);
@@ -119,12 +124,12 @@ CacheLine* CacheSet::findLine(unsigned int tag) {
 }
 
 CacheLine* CacheSet::removeLine() {
-	// find the least recently used line
 	unsigned int way = 0;
 	// find first valid line
 	while (!this->lines[way].getValid()) {
 		way++;
 	}
+	// find the least recently used line
 	for (unsigned int i = way + 1; i < this->numWays; i++) {
 		if ((this->lines[i].getLRU() < this->lines[way].getLRU()) && 
 			(this->lines[i].getValid())) {
@@ -133,7 +138,9 @@ CacheLine* CacheSet::removeLine() {
 	}
 	// way is the least recently used line (LRU = 0)
 	CacheLine* line = new CacheLine();
+	// copy the line
 	*line = this->lines[way];
+	// invalidate the line
 	this->updateLRU(way);
 	this->lines[way].setValid(false);
 	this->lines[way].setDirty(false);
@@ -145,7 +152,9 @@ CacheLine* CacheSet::removeLine() {
 
 CacheLine* CacheSet::removeLine(unsigned int way) {
 	CacheLine* line = new CacheLine();
+	// copy the line
 	*line = this->lines[way];
+	// invalidate the line
 	this->updateLRU(way);
 	this->lines[way].setValid(false);
 	this->lines[way].setDirty(false);
@@ -176,7 +185,8 @@ void CacheSet::updateDirty(unsigned int way, bool dirty) {
 	this->lines[way].setDirty(dirty);
 }
 
-// Cache
+/**********************************************************************************************/
+// Cache definitions
 Cache::Cache(unsigned int MemCyc, unsigned int BSize, unsigned int L1Size, unsigned int L2Size,
             unsigned int L1Assoc, unsigned int L2Assoc, unsigned int L1Cyc, unsigned int L2Cyc,
             unsigned int WrAlloc) : MemCyc(MemCyc), BSize(BSize), L1Size(L1Size), L2Size(L2Size),
@@ -184,7 +194,7 @@ Cache::Cache(unsigned int MemCyc, unsigned int BSize, unsigned int L1Size, unsig
 			L1Reads(0), L1ReadMisses(0), L1Writes(0), L1WriteMisses(0),
 			L2Reads(0), L2ReadMisses(0), L2Writes(0), L2WriteMisses(0),
 			totalL1Cycles(0), totalL2Cycles(0), totalMemCycles(0) {	
-	
+	// calculate the number of bits for the tag, index and offset
     this->BlockSize = 1 << this->BSize; 
 	this->L1OffsetBits = this->BSize;
 	this->L2OffsetBits = this->BSize;
@@ -193,6 +203,7 @@ Cache::Cache(unsigned int MemCyc, unsigned int BSize, unsigned int L1Size, unsig
 	this->L1TagBits = FULL_TAG_SIZE - this->L1IndexBits - this->L1OffsetBits;
 	this->L2TagBits = FULL_TAG_SIZE - this->L2IndexBits - this->L2OffsetBits;
 
+	// calculate the number of blocks, sets and ways
 	this->L1NumBlocks = 1 << (this->L1Size - this->BSize);
 	this->L2NumBlocks = 1 << (this->L2Size - this->BSize);
 	this->L1NumSets = 1 << this->L1IndexBits;
@@ -200,6 +211,7 @@ Cache::Cache(unsigned int MemCyc, unsigned int BSize, unsigned int L1Size, unsig
 	this->L1NumWays = 1 << this->L1Assoc;
 	this->L2NumWays = 1 << this->L2Assoc;
 
+	// create the cache sets
 	this->L1Sets = new CacheSet[this->L1NumSets];
 	for (unsigned int i = 0; i < this->L1NumSets; i++) {
 		this->L1Sets[i].initSet(this->L1NumWays);
@@ -265,45 +277,47 @@ unsigned int Cache::getTotalMemCycles() {
 }
 
 void Cache::readFromCache(unsigned int fullTag) {
+	// calculate the address of the line in L1
 	unsigned int L1Index = (fullTag >> this->L1OffsetBits) & ((1 << this->L1IndexBits) - 1);
 	unsigned int L1Tag = fullTag >> (this->L1OffsetBits + this->L1IndexBits);
 	CacheSet* L1Set = &this->L1Sets[L1Index];
+	// read from L1
 	this->L1Reads++;
 	this->totalL1Cycles += this->L1Cyc;
-	if (L1Set->readFromLine(L1Tag)) {
-		// L1 hit
+	if (L1Set->readFromLine(L1Tag)) { // L1 hit
 		L1Set->updateLRU(L1Set->getWay(L1Tag));
 	} 
 	else { // L1 miss
 		this->L1ReadMisses++;
+		// calculate the address of the line in L2
 		unsigned int L2Index = (fullTag >> this->L2OffsetBits) & ((1 << this->L2IndexBits) - 1);
 		unsigned int L2Tag = fullTag >> (this->L2OffsetBits + this->L2IndexBits);
 		CacheSet* L2Set = &this->L2Sets[L2Index];
+		// read from L2
 		this->L2Reads++;
 		this->totalL2Cycles += this->L2Cyc;
 		if (L2Set->readFromLine(L2Tag)) { // L2 hit
 			unsigned int L2Way = L2Set->getWay(L2Tag);
 			L2Set->updateLRU(L2Way);
-			// L2Set->updateDirty(L2Way, false);
-			
-			// L2 hit, L1 miss, need to write to L1
-			this->L1ReadMissHandler(L1Tag, L1Index);
+			L2Set->updateDirty(L2Way, false);	
+			// L2 hit, L1 miss, need to insert to L1
+			this->L1MissHandler(L1Tag, L1Index);
 		}
 		else { // L2 miss
 			this->L2ReadMisses++;
 			this->totalMemCycles += this->MemCyc;
-			// L2 miss, need to write to L2
-			this->L2ReadMissHandler(L1Tag, L1Index, L2Tag, L2Index);
-
-			// L1Set->readFromLine(L1Tag);
+			// L2 miss, need to insert to L2 and L1
+			this->L2MissHandler(L1Tag, L1Index, L2Tag, L2Index);
 		}
 	}
 }
 
 void Cache::writeToCache(unsigned int fullTag) {
+	// calculate the address of the line in L1
 	unsigned int L1Index = (fullTag >> this->L1OffsetBits) & ((1 << this->L1IndexBits) - 1);
 	unsigned int L1Tag = fullTag >> (this->L1OffsetBits + this->L1IndexBits);
 	CacheSet* L1Set = &this->L1Sets[L1Index];
+	// write to L1
 	this->L1Writes++;
 	this->totalL1Cycles += this->L1Cyc;
 	if (L1Set->writeToLine(L1Tag)) { // L1 hit
@@ -311,9 +325,11 @@ void Cache::writeToCache(unsigned int fullTag) {
 	}
 	else { // L1 miss
 		this->L1WriteMisses++;
+		// calculate the address of the line in L2
 		unsigned int L2Index = (fullTag >> this->L2OffsetBits) & ((1 << this->L2IndexBits) - 1);
 		unsigned int L2Tag = fullTag >> (this->L2OffsetBits + this->L2IndexBits);
 		CacheSet* L2Set = &this->L2Sets[L2Index];
+		// write to L2
 		this->L2Writes++;
 		this->totalL2Cycles += this->L2Cyc;
 		// if write allocate - need to bring the line into L1 and write only to L1
@@ -322,7 +338,7 @@ void Cache::writeToCache(unsigned int fullTag) {
 				// update LRU in L2
 				L2Set->updateLRU(L2Set->getWay(L2Tag));
 				// insert line to L1
-				this->L1ReadMissHandler(L1Tag, L1Index);
+				this->L1MissHandler(L1Tag, L1Index);
 				// write to L1
 				L1Set->writeToLine(L1Tag);
 				L1Set->updateLRU(L1Set->getWay(L1Tag));
@@ -331,7 +347,7 @@ void Cache::writeToCache(unsigned int fullTag) {
 				this->L2WriteMisses++;
 				this->totalMemCycles += this->MemCyc;
 				// insert to L2 and L1 
-				this->L2ReadMissHandler(L1Tag, L1Index, L2Tag, L2Index);
+				this->L2MissHandler(L1Tag, L1Index, L2Tag, L2Index);
 				// write to L1
 				L1Set->writeToLine(L1Tag);
 				L1Set->updateLRU(L1Set->getWay(L1Tag));
@@ -353,10 +369,10 @@ void Cache::writeToCache(unsigned int fullTag) {
 	}
 }
 
-void Cache::L1ReadMissHandler(unsigned int L1Tag, unsigned int L1Index) {
+void Cache::L1MissHandler(unsigned int L1Tag, unsigned int L1Index) {
 	CacheSet* L1Set = &this->L1Sets[L1Index];
 	if (L1Set->insertLine(L1Tag)) {
-		// maybe have an affect on cycles
+		// successful insert
 	}
 	// L1 is full, need to evict
 	else {
@@ -380,14 +396,13 @@ void Cache::L1ReadMissHandler(unsigned int L1Tag, unsigned int L1Index) {
 }
 
 
-void Cache::L2ReadMissHandler(unsigned int L1Tag, unsigned int L1Index, 
+void Cache::L2MissHandler(unsigned int L1Tag, unsigned int L1Index, 
 							  unsigned int L2Tag, unsigned int L2Index) {
 	CacheSet* L2Set = &this->L2Sets[L2Index];
 	// try to insert to L2
 	if (L2Set->insertLine(L2Tag)) {
-		// maybe have an affect on cycles
 		// insert to L1
-		this->L1ReadMissHandler(L1Tag, L1Index);
+		this->L1MissHandler(L1Tag, L1Index);
 	}
 	// L2 is full, need to evict
 	else {
@@ -418,13 +433,15 @@ void Cache::L2ReadMissHandler(unsigned int L1Tag, unsigned int L1Index,
 		L2Set->insertLine(L2Tag);
 		L2Set->updateLRU(L2Set->getWay(L2Tag));
 		// insert to L1
-		this->L1ReadMissHandler(L1Tag, L1Index);
+		this->L1MissHandler(L1Tag, L1Index);
 	}
 }
 
+/**********************************************************************************************/
+
 int main(int argc, char **argv) {
 
-	if (argc < 19) { // might need to be 20
+	if (argc < 19) {
 		cerr << "Not enough arguments" << endl;
 		return 0;
 	}
@@ -474,12 +491,12 @@ int main(int argc, char **argv) {
 	// create cache
 	Cache cache(MemCyc, BSize, L1Size, L2Size, L1Assoc, L2Assoc, 
 				L1Cyc, L2Cyc, WrAlloc);
-	//unsigned int i_test = 1;
+
 	while (getline(file, line)) {
 
 		stringstream ss(line);
 		string address;
-		char operation = 0; // read (R) or write (W)
+		char operation = 0; // read (r) or write (w)
 		if (!(ss >> operation >> address)) {
 			// Operation appears in an Invalid format
 			cout << "Command Format error" << endl;
@@ -492,25 +509,14 @@ int main(int argc, char **argv) {
 		fullTag = strtoul(cutAddress.c_str(), NULL, 16);
 
 		if (operation == 'r') {
-			// Read
-			// DEBUG - remove this line
-			// cout << " (hex) " << hex << fullTag << endl;
 			cache.readFromCache(fullTag);
 		} else if (operation == 'w') {
-			// Write
-			// DEBUG - remove this line
-			// cout << " (hex) " << hex << fullTag << endl;
 			cache.writeToCache(fullTag);
 		} else {
 			// Operation appears in an Invalid format
 			cout << "Operation Format error" << endl;
 			return 0;
 		}
-
-		/*cout << "Line " << i_test << ": " << "op: " << operation << ": ";
-		cout << "L1misses=" << cache.getL1ReadMisses() + cache.getL1WriteMisses() << " ";
-		cout << "L2misses=" << cache.getL2ReadMisses() + cache.getL2WriteMisses() << " " << endl;
-		i_test++;*/
 	}
 	
 
@@ -522,12 +528,8 @@ int main(int argc, char **argv) {
 	double avgAccTime = (double)(cache.getTotalL1Cycles() + cache.getTotalL2Cycles() + cache.getTotalMemCycles()) / 
 						(cache.getL1Reads() + cache.getL1Writes());
 
-
-
 	printf("L1miss=%.03f ", L1MissRate);
 	printf("L2miss=%.03f ", L2MissRate);
 	printf("AccTimeAvg=%.03f\n", avgAccTime);
-	// cout << "L1misses=" << cache.getL1ReadMisses() + cache.getL1WriteMisses() << " ";
-	// cout << "L2misses=" << cache.getL2ReadMisses() + cache.getL2WriteMisses() << " " << endl;
 	return 0;
 }
