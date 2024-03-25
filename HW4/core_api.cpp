@@ -147,7 +147,7 @@ void HALT(threadInfo* thread) {
 void updateIdleCycles(threadInfo threads[], int threadsNum) {
 	for (int i = 0; i < threadsNum; i++) {
 		// decrease idle cycles if thread is not halted and has idle cycles left
-		if (!threads[i].getHalted()&& threads[i].getIdleCyclesLeft() > 0) {
+		if (!threads[i].getHalted() && threads[i].getIdleCyclesLeft() > 0) {
 			threads[i].decreaseIdleCycles();
 		}
 	}
@@ -179,11 +179,6 @@ int blockedSwitchThreads(threadInfo threads[], int threadsNum, int currThread) {
 
 // switch threads in fine-grained MT
 int finegrainedSwitchThreads(threadInfo threads[], int threadsNum, int currThread) {
-	// if current thread is not halted and not in idle state
-	if (!threads[currThread].getHalted() && 
-	    (threads[currThread].getIdleCyclesLeft() == 0)) {
-		return currThread;
-	}
 	// find next thread that is not halted and not in idle state
 	int nextThread = (currThread + 1) % threadsNum;
 	while (threads[nextThread].getHalted() || (threads[nextThread].getIdleCyclesLeft() > 0)){
